@@ -1,0 +1,146 @@
+# This is a script written to extract the data of all the highest paying customers with a bill of over 500000 naira and paste them in an Excel sheet 
+import csv
+import os
+from openpyxl import load_workbook, Workbook
+
+
+def scrape_excel_files(directory):
+    extracted_data = []
+    search_string = 'Total Incl.'
+    search_results = search_merged_cells(directory, search_string)
+
+    for file_name in os.listdir(directory):
+        if file_name.endswith('.xlsx'):
+            file_path = os.path.join(directory, file_name)
+            workbook = load_workbook(file_path)
+            for sheet in workbook.worksheets:
+                for result in search_results:
+                    cell_coordinate = result['Cell Coordinate']
+                    total_incl_vat_cell = sheet[cell_coordinate]
+                    adjacent_cell = sheet.cell(row=total_incl_vat_cell.row, column=total_incl_vat_cell.column + 1)
+                    if adjacent_cell.value and isinstance(adjacent_cell.value, (int, float)) and adjacent_cell.value >= 500000:
+                        print(adjacent_cell.value)
+                        customer_name_cell = find_customer_name(sheet, total_incl_vat_cell.row)
+                        contact_person_cell = find_contact_person(sheet, total_incl_vat_cell.row)
+                        date_cell= dates(sheet, total_incl_vat_cell.row)
+                        if customer_name_cell and date_cell and contact_person_cell:
+                            customer_name = sheet.cell(row=customer_name_cell.row, column=customer_name_cell.column + 1).value
+                            contact_person = sheet.cell(row=contact_person_cell.row, column=contact_person_cell.column + 1).value
+                            date_cells=sheet.cell(row=date_cell.row, column=contact_person_cell.column + 1).value
+                            extracted_data.append([customer_name, adjacent_cell.value, contact_person,date_cells])
+
+
+    return extracted_data
+
+
+
+def process_scraped_data(scraped_data):
+    unique_data = []
+    customer_frequency = {}
+
+    for customer_name, total_incl_vat, contact_person, date_cells in scraped_data:
+        if customer_name not in customer_frequency:
+            customer_frequency[customer_name] = 1
+            unique_data.append([customer_name, total_incl_vat, contact_person, date_cells])
+        else:
+            customer_frequency[customer_name] += 1
+
+    for item in unique_data:
+        item.append(customer_frequency[item[0]])
+
+    return unique_data
+
+
+
+def search_merged_cells(directory, search_string):
+    results = []
+    for file_name in os.listdir(directory):
+        if file_name.endswith('.xlsx'):
+            file_path = os.path.join(directory, file_name)
+            workbook = load_workbook(file_path)
+            for sheet in workbook.worksheets:
+                merged_cells = set(str(merged_range) for merged_range in sheet.merged_cells.ranges)
+                for row in range(1, sheet.max_row + 1):
+                    for column in range(1, sheet.max_column + 1):
+                        cell = sheet.cell(row=row, column=column)
+                        if isinstance(cell.value, str) and cell.value.startswith(search_string):
+                            if cell.coordinate in merged_cells:
+                                top_left_cell = sheet[cell.coordinate].value
+                                results.append({'Cell Coordinate': cell.coordinate, 'Value': top_left_cell})
+                                print(results)
+                            else:
+                                results.append({'Cell Coordinate': cell.coordinate, 'Value': cell.value})
+                                print(results)
+
+    return results
+
+
+
+
+
+
+
+def find_customer_name(sheet, start_row):
+    for row_number in range(start_row - 1, 0, -1):
+        cell = sheet.cell(row=row_number, column=1)
+        if cell.value == 'Customer Name:':
+            return cell
+    return None
+
+
+def find_contact_person(sheet, start_row):
+    for row_number in range(start_row - 1, 0, -1):
+        cell = sheet.cell(row=row_number, column=1)
+        if cell.value == 'Contact Person:':
+            return cell
+    return None
+
+def dates(sheet, start_row):
+    for row_number in range(start_row - 1, 0, -1):
+        cell = sheet.cell(row=row_number, column=1)
+        if cell.value == 'Date:':
+            return cell
+    return None
+
+
+def print_extracted_data(data):
+    for item in data:
+        print(item)
+
+
+def save_data_to_excel(data, save_path):
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "Scraped Data"
+    sheet.append(['Customer Name', 'Total Incl. VAT', 'Contact Person', 'Date'])
+    for row in data:
+        sheet.append(row)
+    workbook.save(save_path)
+
+def save_data_to_csv(data, save_path):
+    with open(save_path, 'w', newline='') as csv_file:
+        writer = csv.writer(csv_file)
+        writer.writerow(['Customer Name', 'Total Incl. VAT', 'Contact Person'])
+        writer.writerows(data)
+
+
+def main():
+    directory_path = r'C:\Users\user\Desktop\TEST'
+    output_excel_path = r'C:\Users\user\Desktop\New folder\MARCH SCRAPER.xlsx'
+    output_csv_path = r'C:\Users\user\Desktop\New folder\MARCH SCRAPER.csv'
+
+
+    scraped_data = scrape_excel_files(directory_path)
+    save_data_to_excel(scraped_data, output_excel_path)
+
+
+
+    # Process the scraped data to strip away repetitions and add frequency column
+    processed_data = process_scraped_data(scraped_data)
+    for item in processed_data:
+        print(item)
+    save_data_to_csv(processed_data, output_csv_path)
+
+
+if __name__ == "__main__":
+    main()
